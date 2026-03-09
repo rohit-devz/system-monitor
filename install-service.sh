@@ -7,15 +7,19 @@ echo "========================================"
 echo ""
 
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
+if [ "$EUID" -ne 0 ]; then
    echo "❌ This script must be run as root (use sudo)"
    exit 1
 fi
 
-# Variables
-SERVICE_FILE="/etc/systemd/system/system-monitor.service"
-PROJECT_DIR="/home/rohit/Desktop/system_monitor"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
 SERVICE_NAME="system-monitor"
+SERVICE_FILE="/etc/systemd/system/system-monitor.service"
+
+# Get the owner of the project directory (to determine which user to run as)
+PROJECT_USER=$(ls -ld "$PROJECT_DIR" | awk '{print $3}')
 
 # Check if service file exists in project
 if [ ! -f "$PROJECT_DIR/system-monitor.service" ]; then
@@ -23,10 +27,17 @@ if [ ! -f "$PROJECT_DIR/system-monitor.service" ]; then
     exit 1
 fi
 
+# Create temporary service file with correct paths and user
+echo "📋 Preparing service file..."
+TEMP_SERVICE=$(mktemp)
+sed -e "s|/home/rohit/Desktop/system_monitor|$PROJECT_DIR|g" \
+    -e "s|^User=.*|User=$PROJECT_USER|" \
+    "$PROJECT_DIR/system-monitor.service" > "$TEMP_SERVICE"
+
 # Copy service file to systemd directory
-echo "📋 Copying service file..."
-cp "$PROJECT_DIR/system-monitor.service" "$SERVICE_FILE"
+cp "$TEMP_SERVICE" "$SERVICE_FILE"
 chmod 644 "$SERVICE_FILE"
+rm "$TEMP_SERVICE"
 
 # Install dependencies if not already installed
 echo "📦 Installing/Verifying dependencies..."
@@ -56,6 +67,7 @@ echo "📊 Service Information:"
 echo "   Service name: $SERVICE_NAME"
 echo "   Service file: $SERVICE_FILE"
 echo "   Project directory: $PROJECT_DIR"
+echo "   Running as user: $PROJECT_USER"
 echo "   Access URL: http://localhost:8501"
 echo ""
 echo "📝 Useful Commands:"
