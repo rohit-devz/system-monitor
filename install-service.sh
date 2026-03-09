@@ -21,6 +21,17 @@ SERVICE_FILE="/etc/systemd/system/system-monitor.service"
 # Get the owner of the project directory
 PROJECT_USER=$(ls -ld "$PROJECT_DIR" | awk '{print $3}')
 
+# Check if virtual environment exists
+if [ ! -d "$PROJECT_DIR/venv" ]; then
+    echo "❌ Virtual environment not found!"
+    echo ""
+    echo "Please run the setup first:"
+    echo "   bash $PROJECT_DIR/setup-venv.sh"
+    exit 1
+fi
+
+PYTHON_BIN="$PROJECT_DIR/venv/bin/python"
+
 echo "📋 Creating service file..."
 
 # Create service file directly
@@ -36,7 +47,7 @@ Type=simple
 User=$PROJECT_USER
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-ExecStart=/usr/bin/python3 -m streamlit run app.py \\
+ExecStart=$PYTHON_BIN -m streamlit run app.py \\
     --server.port=8501 \\
     --server.address=0.0.0.0 \\
     --server.headless=true \\
@@ -72,17 +83,6 @@ EOF
 chmod 644 "$SERVICE_FILE"
 
 echo "✅ Service file created: $SERVICE_FILE"
-echo ""
-
-# Install dependencies if not already installed
-echo "📦 Installing/Verifying dependencies..."
-if ! python3 -m pip list | grep -q streamlit; then
-    echo "   Installing streamlit, psutil, docker..."
-    python3 -m pip install streamlit psutil docker
-else
-    echo "   Dependencies already installed"
-fi
-
 echo ""
 echo "🔄 Reloading systemd daemon..."
 systemctl daemon-reload
