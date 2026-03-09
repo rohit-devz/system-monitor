@@ -1,0 +1,42 @@
+[Unit]
+Description=System Monitor - Streamlit Application
+Documentation=https://streamlit.io
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=rohit
+WorkingDirectory=/home/rohit/Desktop/system_monitor
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 -m streamlit run app.py \
+    --server.port=8501 \
+    --server.address=0.0.0.0 \
+    --server.headless=true \
+    --logger.level=warning
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/rohit/Desktop/system_monitor
+BindPaths=/var/run/docker.sock:/var/run/docker.sock
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=system-monitor
+
+[Install]
+WantedBy=multi-user.target
