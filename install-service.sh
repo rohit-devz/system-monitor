@@ -18,45 +18,81 @@ PROJECT_DIR="$SCRIPT_DIR"
 SERVICE_NAME="system-monitor"
 SERVICE_FILE="/etc/systemd/system/system-monitor.service"
 
-# Get the owner of the project directory (to determine which user to run as)
+# Get the owner of the project directory
 PROJECT_USER=$(ls -ld "$PROJECT_DIR" | awk '{print $3}')
 
-# Check if service file exists in project
-if [ ! -f "$PROJECT_DIR/system-monitor.service" ]; then
-    echo "❌ Service file not found at $PROJECT_DIR/system-monitor.service"
-    exit 1
-fi
+echo "📋 Creating service file..."
 
-# Create temporary service file with correct paths and user
-echo "📋 Preparing service file..."
-TEMP_SERVICE=$(mktemp)
-sed -e "s|/home/rohit/Desktop/system_monitor|$PROJECT_DIR|g" \
-    -e "s|^User=.*|User=$PROJECT_USER|" \
-    "$PROJECT_DIR/system-monitor.service" > "$TEMP_SERVICE"
+# Create service file directly
+cat > "$SERVICE_FILE" << EOF
+[Unit]
+Description=System Monitor - Streamlit Application
+Documentation=https://streamlit.io
+After=network.target docker.service
+Wants=docker.service
 
-# Copy service file to systemd directory
-cp "$TEMP_SERVICE" "$SERVICE_FILE"
+[Service]
+Type=simple
+User=$PROJECT_USER
+WorkingDirectory=$PROJECT_DIR
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 -m streamlit run app.py \\
+    --server.port=8501 \\
+    --server.address=0.0.0.0 \\
+    --server.headless=true \\
+    --logger.level=warning
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$PROJECT_DIR
+BindPaths=/var/run/docker.sock:/var/run/docker.sock
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=system-monitor
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 chmod 644 "$SERVICE_FILE"
-rm "$TEMP_SERVICE"
+
+echo "✅ Service file created: $SERVICE_FILE"
+echo ""
 
 # Install dependencies if not already installed
 echo "📦 Installing/Verifying dependencies..."
 if ! python3 -m pip list | grep -q streamlit; then
-    echo "   Installing streamlit..."
+    echo "   Installing streamlit, psutil, docker..."
     python3 -m pip install streamlit psutil docker
 else
     echo "   Dependencies already installed"
 fi
 
-# Reload systemd daemon
+echo ""
 echo "🔄 Reloading systemd daemon..."
 systemctl daemon-reload
 
-# Enable the service
+# Stop any existing service
+systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+
 echo "✅ Enabling service..."
 systemctl enable "$SERVICE_NAME"
 
-# Start the service
 echo "▶️  Starting service..."
 systemctl start "$SERVICE_NAME"
 
@@ -70,6 +106,14 @@ echo "   Project directory: $PROJECT_DIR"
 echo "   Running as user: $PROJECT_USER"
 echo "   Access URL: http://localhost:8501"
 echo ""
+echo "⏳ Waiting for service to start..."
+sleep 2
+
+echo ""
+echo "📊 Service Status:"
+systemctl status "$SERVICE_NAME" --no-pager
+
+echo ""
 echo "📝 Useful Commands:"
 echo "   Start:   sudo systemctl start $SERVICE_NAME"
 echo "   Stop:    sudo systemctl stop $SERVICE_NAME"
@@ -77,5 +121,3 @@ echo "   Restart: sudo systemctl restart $SERVICE_NAME"
 echo "   Status:  sudo systemctl status $SERVICE_NAME"
 echo "   Logs:    sudo journalctl -u $SERVICE_NAME -f"
 echo "   Disable: sudo systemctl disable $SERVICE_NAME"
-echo ""
-echo "✅ Service is now running!"
